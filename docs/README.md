@@ -2,7 +2,7 @@
 <img align='right' src='SukiSU-mini.svg' width='220px' alt="sukisu logo">
 
 
-**English** | [简体中文](./zh/README.md) | [日本語](./ja/README.md) | [Türkçe](./tr/README.md) | [Русский](./ru/README.md)
+**English** | [简体中文](./zh/README.md) | [日本語](./ja/README.md) | [Türkçe](./tr/README.md)
 
 A kernel-based root solution for Android devices, forked from [`tiann/KernelSU`](https://github.com/tiann/KernelSU), and added some interesting changes.
 
@@ -14,20 +14,18 @@ A kernel-based root solution for Android devices, forked from [`tiann/KernelSU`]
 ## Features
 
 1. Kernel-based `su` and root access management
-2. Module system based on [Magic Mount](https://github.com/5ec1cff/KernelSU)
-   > **Note:** SukiSU now delegates all module mounting to the installed *metamodule*; the core no longer handles mount operations.
-3. [App Profile](https://kernelsu.org/guide/app-profile.html): Lock up the root power in a cage
-4. Support non-GKI and GKI 1.0
-5. KPM Support
-6. Tweaks to the manager theme and the built-in susfs management tool.
+2. [App Profile](https://kernelsu.org/guide/app-profile.html): Lock up the root power in a cage
+3. Support non-GKI and GKI 1.0
+4. KPM Support
+5. Tweaks to the manager theme and the built-in susfs management tool.
 
 ## Compatibility Status
 
-- SukiSU officially supports Android GKI 2.0 devices (kernel 5.10+).
+- KernelSU (before v1.0.0) officially supports Android GKI 2.0 devices (kernel 5.10+).
 
 - Older kernels (4.4+) are also compatible, but the kernel will have to be built manually.
 
-- With more backports, SukiSU can support 3.x kernel (3.4-3.18).
+- With more backports, KernelSU can supports 3.x kernel (3.4-3.18).
 
 - Currently, only `arm64-v8a`, `armeabi-v7a (bare)` and `X86_64`(some) are supported.
 

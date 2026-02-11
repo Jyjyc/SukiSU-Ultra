@@ -2,7 +2,7 @@
 <img align='right' src='SukiSU-mini.svg' width='250px' alt="sukisu logo">
 
 
-[English](../README.md) | [简体中文](../zh/README.md) | [日本語](../ja/README.md) | **Türkçe** | [Русский](../ru/README.md)
+[English](../README.md) | [简体中文](../zh/README.md) | [日本語](../ja/README.md) | **Türkçe**
 
 [KernelSU](https://github.com/tiann/KernelSU) tabanlı Android cihaz root çözümü
 

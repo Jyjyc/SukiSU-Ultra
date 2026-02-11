@@ -260,6 +260,15 @@ enum Module {
         id: String,
     },
 
+    /// module lua runner
+    #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+    Lua {
+        // module id
+        id: String,
+        // lua function
+        function: String,
+    },
+
     /// list all modules
     List,
 
@@ -358,6 +367,9 @@ enum Feature {
     Get {
         /// Feature ID or name (su_compat, kernel_umount)
         id: String,
+        /// Read from config file
+        #[arg(long, default_value_t = false)]
+        config: bool,
     },
 
     /// Set feature value
@@ -522,6 +534,10 @@ pub fn run() -> Result<()> {
                 Module::Enable { id } => module::enable_module(&id),
                 Module::Disable { id } => module::disable_module(&id),
                 Module::Action { id } => module::run_action(&id),
+                #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+                Module::Lua { id, function } => {
+                    module::run_lua(&id, &function, false, true).map_err(|e| anyhow::anyhow!("{e}"))
+                }
                 Module::List => module::list_modules(),
                 Module::Config { command } => {
                     // Get module ID from environment variable
@@ -633,7 +649,13 @@ pub fn run() -> Result<()> {
         },
 
         Commands::Feature { command } => match command {
-            Feature::Get { id } => crate::feature::get_feature(&id),
+            Feature::Get { id, config } => {
+                if config {
+                    crate::feature::get_feature_config(&id)
+                } else {
+                    crate::feature::get_feature(&id)
+                }
+            }
             Feature::Set { id, value } => crate::feature::set_feature(&id, value),
             Feature::List => {
                 crate::feature::list_features();

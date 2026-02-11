@@ -13,6 +13,7 @@
 #include "app_profile.h"
 #include "klog.h" // IWYU pragma: keep
 #include "selinux/selinux.h"
+#include "su_mount_ns.h"
 #include "syscall_hook_manager.h"
 #include "sucompat.h"
 
@@ -148,21 +149,29 @@ void escape_with_root_profile(void)
            sizeof(cred->cap_bset));
 
     setup_groups(profile, cred);
+    setup_selinux(profile->selinux_domain, cred);
 
     commit_creds(cred);
 
     disable_seccomp();
 
-    setup_selinux(profile->selinux_domain);
-
     for_each_thread (p, t) {
         ksu_set_task_tracepoint_flag(t);
     }
+
+    setup_mount_ns(profile->namespaces);
 }
 
 void escape_to_root_for_init(void)
 {
-    setup_selinux(KERNEL_SU_CONTEXT);
+    struct cred *cred = prepare_creds();
+    if (!cred) {
+        pr_err("Failed to prepare init's creds!\n");
+        return;
+    }
+
+    setup_selinux(KERNEL_SU_CONTEXT, cred);
+    commit_creds(cred);
 }
 
 #ifdef CONFIG_KSU_MANUAL_SU
@@ -298,6 +307,7 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
            sizeof(newcreds->cap_bset));
 
     setup_groups(profile, newcreds);
+    setup_selinux(profile->selinux_domain, newcreds);
     task_lock(target_task);
 
     const struct cred *old_creds = get_task_cred(target_task);
@@ -310,7 +320,6 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
         disable_seccomp_for_task(target_task);
     }
 
-    setup_selinux(profile->selinux_domain);
     put_cred(old_creds);
     wake_up_process(target_task);
 
@@ -325,6 +334,7 @@ void escape_to_root_for_cmd_su(uid_t target_uid, pid_t target_pid)
     for_each_thread (p, t) {
         ksu_set_task_tracepoint_flag(t);
     }
+    setup_mount_ns(profile->namespaces);
     pr_info("cmd_su: privilege escalation completed for UID: %d, PID: %d\n",
             target_uid, target_pid);
 }

@@ -563,6 +563,11 @@ static int list_try_umount(void __user *arg)
     if (copy_from_user(&cmd, arg, sizeof(cmd)))
         return -EFAULT;
 
+    if (cmd.buf_size > 1024 * 1024) {
+        pr_err("list_try_umount: invalid buf_size %u\n", cmd.buf_size);
+        return -EINVAL;
+    }
+
     output_size = cmd.buf_size ? cmd.buf_size : 4096;
 
     if (!cmd.arg || output_size == 0)
@@ -607,7 +612,7 @@ static int do_get_sulog_dump(void __user *arg)
     int ret;
 
     if (current_uid().val != 0)
-		return -EFAULT;
+        return -EFAULT;
 
     ret = send_sulog_dump(arg);
     if (ret)
@@ -918,7 +923,6 @@ void ksu_supercalls_init(void)
     }
 
     sulog_init_heap(); // grab heap memory for sulog
-
 }
 
 void ksu_supercalls_exit(void)

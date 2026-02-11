@@ -7,22 +7,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.parcelize.Parcelize
 import com.sukisu.ultra.Natives
+import com.sukisu.ultra.ksuApp
 import com.sukisu.ultra.profile.Capabilities
 import com.sukisu.ultra.profile.Groups
 import com.sukisu.ultra.ui.util.getAppProfileTemplate
 import com.sukisu.ultra.ui.util.listAppProfileTemplates
 import com.sukisu.ultra.ui.util.setAppProfileTemplate
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.parcelize.Parcelize
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Collator
-import java.util.*
-import java.util.concurrent.TimeUnit
+import java.util.Locale
 
 
 /**
@@ -36,7 +35,6 @@ const val TAG = "TemplateViewModel"
 
 class TemplateViewModel : ViewModel() {
     companion object {
-
         private var templates by mutableStateOf<List<TemplateInfo>>(emptyList())
     }
 
@@ -47,7 +45,6 @@ class TemplateViewModel : ViewModel() {
         val description: String = "",
         val author: String = "",
         val local: Boolean = true,
-
         val namespace: Int = Natives.Profile.Namespace.INHERITED.ordinal,
         val uid: Int = Natives.ROOT_UID,
         val gid: Int = Natives.ROOT_GID,
@@ -120,49 +117,40 @@ class TemplateViewModel : ViewModel() {
         }
     }
 
-    suspend fun exportTemplates(onTemplateEmpty: () -> Unit, callback: (String) -> Unit) {
-        withContext(Dispatchers.IO) {
-            val templates = listAppProfileTemplates().mapNotNull(::getTemplateInfoById).filter {
-                it.local
-            }
-            templates.ifEmpty {
-                onTemplateEmpty()
-                return@withContext
-            }
-            JSONArray(templates.map {
-                it.toJSON()
-            }).toString().let(callback)
+    suspend fun exportTemplates(onTemplateEmpty: suspend () -> Unit, callback: suspend (String) -> Unit) {
+        val result = withContext(Dispatchers.IO) {
+            val templates = listAppProfileTemplates()
+                .mapNotNull(::getTemplateInfoById)
+                .filter { it.local }
+            if (templates.isEmpty()) return@withContext null
+            JSONArray(templates.map { it.toJSON() }).toString()
         }
+
+        if (result == null) onTemplateEmpty() else callback(result)
     }
 }
 
 private fun fetchRemoteTemplates() {
     runCatching {
-        val client: OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(5, TimeUnit.SECONDS)
-            .writeTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .build()
-
-        client.newCall(
+        ksuApp.okhttpClient.newCall(
             Request.Builder().url(TEMPLATE_INDEX_URL).build()
         ).execute().use { response ->
             if (!response.isSuccessful) {
                 return
             }
-            val remoteTemplateIds = JSONArray(response.body!!.string())
+            val remoteTemplateIds = JSONArray(response.body.string())
             Log.i(TAG, "fetchRemoteTemplates: $remoteTemplateIds")
             0.until(remoteTemplateIds.length()).forEach { i ->
                 val id = remoteTemplateIds.getString(i)
                 Log.i(TAG, "fetch template: $id")
-                val templateJson = client.newCall(
+                val templateJson = ksuApp.okhttpClient.newCall(
                     Request.Builder().url(TEMPLATE_URL.format(id)).build()
                 ).runCatching {
                     execute().use { response ->
                         if (!response.isSuccessful) {
                             return@forEach
                         }
-                        response.body!!.string()
+                        response.body.string()
                     }
                 }.getOrNull() ?: return@forEach
                 Log.i(TAG, "template: $templateJson")
@@ -219,11 +207,11 @@ private fun getLocaleString(json: JSONObject, key: String): String {
     val localeKey = "${locale.language}_${locale.country}"
     json.optJSONObject("locales")?.let {
         // check locale first
-        it.optJSONObject(localeKey)?.let { json->
+        it.optJSONObject(localeKey)?.let { json ->
             return json.optString(key, fallback)
         }
         // fallback to language
-        it.optJSONObject(locale.language)?.let { json->
+        it.optJSONObject(locale.language)?.let { json ->
             return json.optString(key, fallback)
         }
     }
@@ -281,23 +269,25 @@ fun TemplateViewModel.TemplateInfo.toJSON(): JSONObject {
         put("gid", template.gid)
 
         if (template.groups.isNotEmpty()) {
-            put("groups", JSONArray(
-                Groups.entries.filter {
-                    template.groups.contains(it.gid)
-                }.map {
-                    it.name
-                }
-            ))
+            put(
+                "groups", JSONArray(
+                    Groups.entries.filter {
+                        template.groups.contains(it.gid)
+                    }.map {
+                        it.name
+                    }
+                ))
         }
 
         if (template.capabilities.isNotEmpty()) {
-            put("capabilities", JSONArray(
-                Capabilities.entries.filter {
-                    template.capabilities.contains(it.cap)
-                }.map {
-                    it.name
-                }
-            ))
+            put(
+                "capabilities", JSONArray(
+                    Capabilities.entries.filter {
+                        template.capabilities.contains(it.cap)
+                    }.map {
+                        it.name
+                    }
+                ))
         }
 
         if (template.context.isNotEmpty()) {

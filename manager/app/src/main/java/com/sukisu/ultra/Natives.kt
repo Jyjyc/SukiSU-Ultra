@@ -4,6 +4,7 @@ import android.os.Parcelable
 import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 import kotlinx.parcelize.Parcelize
+import kotlinx.serialization.Serializable
 
 /**
  * @author weishu
@@ -17,24 +18,17 @@ object Natives {
     // 10977: change groups_count and groups to avoid overflow write
     // 11071: Fix the issue of failing to set a custom SELinux type.
     // 12143: breaking: new supercall impl
-    const val MINIMAL_SUPPORTED_KERNEL = 12143
+    const val MINIMAL_SUPPORTED_KERNEL = 22000
+
+    // Get full version
+    external fun getFullVersion(): String
+    const val MINIMAL_SUPPORTED_KERNEL_FULL = "v4.0.0"
 
     // 12040: Support disable sucompat mode
     const val KERNEL_SU_DOMAIN = "u:r:su:s0"
 
-    const val MINIMAL_SUPPORTED_KERNEL_FULL = "v3.1.8"
-
-    const val MINIMAL_SUPPORTED_KPM = 12800
-
-    const val MINIMAL_SUPPORTED_DYNAMIC_MANAGER = 13215
-
-    const val MINIMAL_NEW_IOCTL_KERNEL = 13490
-
     const val ROOT_UID = 0
     const val ROOT_GID = 0
-
-    // 获取完整版本号
-    external fun getFullVersion(): String
 
     fun isVersionLessThan(v1Full: String, v2Full: String): Boolean {
         fun extractVersionParts(version: String): List<Int> {
@@ -59,7 +53,6 @@ object Natives {
     }
 
     init {
-        System.loadLibrary("zakosign")
         System.loadLibrary("kernelsu")
     }
 
@@ -108,18 +101,12 @@ object Natives {
     external fun setKernelUmountEnabled(enabled: Boolean): Boolean
 
     /**
-    external fun isKPMEnabled(): Boolean
      * Get the user name for the uid.
      */
-    external fun isKPMEnabled(): Boolean
+    external fun getUserName(uid: Int): String?
 
     external fun getHookType(): String
 
-    // 模块签名验证
-    external fun verifyModuleSignature(modulePath: String): Boolean
-
-    external fun getUserName(uid: Int): String?
-    
     private const val NON_ROOT_DEFAULT_PROFILE_KEY = "$"
     private const val NOBODY_UID = 9999
 
@@ -145,9 +132,10 @@ object Natives {
         return isVersionLessThan(getFullVersion(), MINIMAL_SUPPORTED_KERNEL_FULL)
     }
 
+    @Keep
     @Immutable
     @Parcelize
-    @Keep
+    @Serializable
     data class Profile(
         // and there is a default profile for root and non-root
         val name: String,

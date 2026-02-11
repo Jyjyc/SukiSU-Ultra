@@ -1,47 +1,60 @@
 package com.sukisu.ultra.ui.susfs
 
 import android.annotation.SuppressLint
-import android.content.Context
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ramcosta.composedestinations.annotation.Destination
-import com.ramcosta.composedestinations.annotation.RootGraph
-import com.ramcosta.composedestinations.navigation.DestinationsNavigator
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.add
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 import com.sukisu.ultra.R
+import com.sukisu.ultra.ui.navigation3.LocalNavigator
 import com.sukisu.ultra.ui.susfs.component.*
-import com.sukisu.ultra.ui.theme.CardConfig
+import com.sukisu.ultra.ui.susfs.content.BasicSettingsContent
+import com.sukisu.ultra.ui.susfs.content.EnabledFeaturesContent
+import com.sukisu.ultra.ui.susfs.content.KstatConfigContent
+import com.sukisu.ultra.ui.susfs.content.PathSettingsContent
+import com.sukisu.ultra.ui.susfs.content.SusLoopPathsContent
+import com.sukisu.ultra.ui.susfs.content.SusMapsContent
+import com.sukisu.ultra.ui.susfs.content.SusPathsContent
 import com.sukisu.ultra.ui.susfs.util.SuSFSManager
-import com.sukisu.ultra.ui.susfs.util.SuSFSManager.isSusVersion158
-import com.sukisu.ultra.ui.susfs.util.SuSFSManager.isSusVersion159
-import com.sukisu.ultra.ui.susfs.util.SuSFSManager.isSusVersion1512
-import com.sukisu.ultra.ui.util.getSuSFSVersion
 import com.sukisu.ultra.ui.util.isAbDevice
 import kotlinx.coroutines.launch
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.*
+import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.extra.SuperDialog
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
-/**
- * 标签页枚举类
- */
 enum class SuSFSTab(val displayNameRes: Int) {
     BASIC_SETTINGS(R.string.susfs_tab_basic_settings),
     SUS_PATHS(R.string.susfs_tab_sus_paths),
@@ -52,29 +65,24 @@ enum class SuSFSTab(val displayNameRes: Int) {
     ENABLED_FEATURES(R.string.susfs_tab_enabled_features);
 
     companion object {
-        fun getAllTabs(isSusVersion158: Boolean, isSusVersion159: Boolean, isSusVersion1512: Boolean): List<SuSFSTab> {
-            return when {
-                isSusVersion1512 -> entries.toList()
-                isSusVersion159 -> entries.filter { it != SUS_MAPS}
-                isSusVersion158 -> entries.filter { it != SUS_LOOP_PATHS && it != SUS_MAPS }
-                else -> entries.filter { it != PATH_SETTINGS && it != SUS_LOOP_PATHS && it != SUS_MAPS }
-            }
+        fun getAllTabs(): List<SuSFSTab> {
+            return entries.toList()
         }
     }
 }
 
-/**
- * SuSFS配置界面
- */
 @SuppressLint("SdCardPath", "AutoboxingStateCreation")
-@OptIn(ExperimentalMaterial3Api::class)
-@Destination<RootGraph>
 @Composable
-fun SuSFSConfigScreen(
-    navigator: DestinationsNavigator
-) {
+fun SuSFSConfigScreen() {
+    val navigator = LocalNavigator.current
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val scrollBehavior = MiuixScrollBehavior()
+    val hazeState = remember { HazeState() }
+    val hazeStyle = HazeStyle(
+        backgroundColor = colorScheme.surface,
+        tint = HazeTint(colorScheme.surface.copy(0.8f))
+    )
 
     var selectedTab by remember { mutableStateOf(SuSFSTab.BASIC_SETTINGS) }
     var unameValue by remember { mutableStateOf("") }
@@ -135,16 +143,10 @@ fun SuSFSConfigScreen(
     var showResetSusMapsDialog by remember { mutableStateOf(false) }
     var showResetKstatDialog by remember { mutableStateOf(false) }
 
-    // 备份还原相关状态
-    var showBackupDialog by remember { mutableStateOf(false) }
-    var showRestoreDialog by remember { mutableStateOf(false) }
-    var showRestoreConfirmDialog by remember { mutableStateOf(false) }
-    var selectedBackupFile by remember { mutableStateOf<String?>(null) }
-    var backupInfo by remember { mutableStateOf<SuSFSManager.BackupData?>(null) }
 
     var isNavigating by remember { mutableStateOf(false) }
 
-    val allTabs = SuSFSTab.getAllTabs(isSusVersion158(), isSusVersion159(), isSusVersion1512())
+    val allTabs = SuSFSTab.getAllTabs()
 
     // 实时判断是否可以启用开机自启动
     val canEnableAutoStart by remember {
@@ -153,94 +155,7 @@ fun SuSFSConfigScreen(
         }
     }
 
-    var showVersionMismatchDialog by remember { mutableStateOf(false) }
 
-    if (showVersionMismatchDialog) {
-        AlertDialog(
-            onDismissRequest = { showVersionMismatchDialog = false },
-            title = {
-                Text(
-                    text = stringResource(R.string.warning),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(
-                    stringResource(
-                        R.string.susfs_version_mismatch,
-                        try { getSuSFSVersion() } catch (_: Exception) { "unknown" },
-                        SuSFSManager.MAX_SUSFS_VERSION
-                    )
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { showVersionMismatchDialog = false },
-                    modifier = Modifier.padding(8.dp)
-                ) {
-                    Text(stringResource(R.string.confirm))
-                }
-            }
-        )
-    }
-
-    // 文件选择器
-    val backupFileLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        uri?.let { fileUri ->
-            val fileName = SuSFSManager.getDefaultBackupFileName()
-            val tempFile = File(context.cacheDir, fileName)
-            coroutineScope.launch {
-                isLoading = true
-                val success = SuSFSManager.createBackup(context, tempFile.absolutePath)
-                if (success) {
-                    try {
-                        context.contentResolver.openOutputStream(fileUri)?.use { outputStream ->
-                            tempFile.inputStream().use { inputStream ->
-                                inputStream.copyTo(outputStream)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                    tempFile.delete()
-                }
-                isLoading = false
-                showBackupDialog = false
-            }
-        }
-    }
-
-    val restoreFileLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        uri?.let { fileUri ->
-            coroutineScope.launch {
-                try {
-                    val tempFile = File(context.cacheDir, "temp_restore.susfs_backup")
-                    context.contentResolver.openInputStream(fileUri)?.use { inputStream ->
-                        tempFile.outputStream().use { outputStream ->
-                            inputStream.copyTo(outputStream)
-                        }
-                    }
-
-                    // 验证备份文件
-                    val backup = SuSFSManager.validateBackupFile(tempFile.absolutePath)
-                    if (backup != null) {
-                        selectedBackupFile = tempFile.absolutePath
-                        backupInfo = backup
-                        showRestoreConfirmDialog = true
-                    }
-                    tempFile.deleteOnExit()
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-                showRestoreDialog = false
-            }
-        }
-    }
 
     // 加载启用功能状态
     fun loadEnabledFeatures() {
@@ -271,19 +186,6 @@ fun SuSFSConfigScreen(
     // 加载当前配置
     LaunchedEffect(Unit) {
         coroutineScope.launch {
-            try {
-                val version = getSuSFSVersion()
-                val binaryName = "ksu_susfs_${version.removePrefix("v")}"
-
-                val isBinaryAvailable = try {
-                    context.assets.open(binaryName).use { true }
-                } catch (_: Exception) { false }
-
-                if (!isBinaryAvailable) {
-                    showVersionMismatchDialog = true
-                }
-            } catch (_: Exception) {
-            }
 
             unameValue = SuSFSManager.getUnameValue(context)
             buildTimeValue = SuSFSManager.getBuildTimeValue(context)
@@ -320,185 +222,6 @@ fun SuSFSConfigScreen(
         }
     }
 
-    // 备份对话框
-    if (showBackupDialog) {
-        AlertDialog(
-            onDismissRequest = { showBackupDialog = false },
-            title = {
-                Text(
-                    text = stringResource(R.string.susfs_backup_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(stringResource(R.string.susfs_backup_description))
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
-                        val timestamp = dateFormat.format(Date())
-                        backupFileLauncher.launch("SuSFS_Config_$timestamp.susfs_backup")
-                    },
-                    enabled = !isLoading,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(stringResource(R.string.susfs_backup_create))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showBackupDialog = false },
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            shape = RoundedCornerShape(12.dp)
-        )
-    }
-
-    // 还原对话框
-    if (showRestoreDialog) {
-        AlertDialog(
-            onDismissRequest = { showRestoreDialog = false },
-            title = {
-                Text(
-                    text = stringResource(R.string.susfs_restore_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Text(stringResource(R.string.susfs_restore_description))
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        restoreFileLauncher.launch(arrayOf("application/json", "*/*"))
-                    },
-                    enabled = !isLoading,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(stringResource(R.string.susfs_restore_select_file))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showRestoreDialog = false },
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            shape = RoundedCornerShape(12.dp)
-        )
-    }
-
-    // 还原确认对话框
-    if (showRestoreConfirmDialog && backupInfo != null) {
-        AlertDialog(
-            onDismissRequest = {
-                showRestoreConfirmDialog = false
-                selectedBackupFile = null
-                backupInfo = null
-            },
-            title = {
-                Text(
-                    text = stringResource(R.string.susfs_restore_confirm_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(stringResource(R.string.susfs_restore_confirm_description))
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                            Text(
-                                text = stringResource(R.string.susfs_backup_info_date,
-                                    dateFormat.format(Date(backupInfo!!.timestamp))),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.susfs_backup_info_device, backupInfo!!.deviceInfo),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.susfs_backup_info_version, backupInfo!!.version),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        selectedBackupFile?.let { filePath ->
-                            coroutineScope.launch {
-                                isLoading = true
-                                val success = SuSFSManager.restoreFromBackup(context, filePath)
-                                if (success) {
-                                    // 重新加载所有配置
-                                    unameValue = SuSFSManager.getUnameValue(context)
-                                    buildTimeValue = SuSFSManager.getBuildTimeValue(context)
-                                    autoStartEnabled = SuSFSManager.isAutoStartEnabled(context)
-                                    executeInPostFsData = SuSFSManager.getExecuteInPostFsData(context)
-                                    susPaths = SuSFSManager.getSusPaths(context)
-                                    susLoopPaths = SuSFSManager.getSusLoopPaths(context)
-                                    susMaps = SuSFSManager.getSusMaps(context)
-                                    androidDataPath = SuSFSManager.getAndroidDataPath(context)
-                                    sdcardPath = SuSFSManager.getSdcardPath(context)
-                                    kstatConfigs = SuSFSManager.getKstatConfigs(context)
-                                    addKstatPaths = SuSFSManager.getAddKstatPaths(context)
-                                    hideSusMountsForAllProcs = SuSFSManager.getHideSusMountsForAllProcs(context)
-                                    enableHideBl = SuSFSManager.getEnableHideBl(context)
-                                    enableCleanupResidue = SuSFSManager.getEnableCleanupResidue(context)
-                                    enableAvcLogSpoofing = SuSFSManager.getEnableAvcLogSpoofing(context)
-                                }
-                                isLoading = false
-                                showRestoreConfirmDialog = false
-                                selectedBackupFile = null
-                                backupInfo = null
-                            }
-                        }
-                    },
-                    enabled = !isLoading,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(stringResource(R.string.susfs_restore_confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showRestoreConfirmDialog = false
-                        selectedBackupFile = null
-                        backupInfo = null
-                    },
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            shape = RoundedCornerShape(12.dp)
-        )
-    }
 
     // 槽位信息对话框
     SlotInfoDialog(
@@ -508,11 +231,11 @@ fun SuSFSConfigScreen(
         currentActiveSlot = currentActiveSlot,
         isLoadingSlotInfo = isLoadingSlotInfo,
         onRefresh = { loadSlotInfo() },
-        onUseUname = { uname ->
+        onUseUname = { uname: String ->
             unameValue = uname
             showSlotInfoDialog = false
         },
-        onUseBuildTime = { buildTime ->
+        onUseBuildTime = { buildTime: String ->
             buildTimeValue = buildTime
             showSlotInfoDialog = false
         }
@@ -526,10 +249,11 @@ fun SuSFSConfigScreen(
             editingPath = null
         },
         onConfirm = { path ->
+            val oldPath = editingPath
             coroutineScope.launch {
                 isLoading = true
-                val success = if (editingPath != null) {
-                    SuSFSManager.editSusPath(context, editingPath!!, path)
+                val success = if (oldPath != null) {
+                    SuSFSManager.editSusPath(context, oldPath, path)
                 } else {
                     SuSFSManager.addSusPath(context, path)
                 }
@@ -544,7 +268,6 @@ fun SuSFSConfigScreen(
         isLoading = isLoading,
         titleRes = if (editingPath != null) R.string.susfs_edit_sus_path else R.string.susfs_add_sus_path,
         labelRes = R.string.susfs_path_label,
-        placeholderRes = R.string.susfs_path_placeholder,
         initialValue = editingPath ?: ""
     )
 
@@ -555,10 +278,11 @@ fun SuSFSConfigScreen(
             editingLoopPath = null
         },
         onConfirm = { path ->
+            val oldPath = editingLoopPath
             coroutineScope.launch {
                 isLoading = true
-                val success = if (editingLoopPath != null) {
-                    SuSFSManager.editSusLoopPath(context, editingLoopPath!!, path)
+                val success = if (oldPath != null) {
+                    SuSFSManager.editSusLoopPath(context, oldPath, path)
                 } else {
                     SuSFSManager.addSusLoopPath(context, path)
                 }
@@ -573,7 +297,6 @@ fun SuSFSConfigScreen(
         isLoading = isLoading,
         titleRes = if (editingLoopPath != null) R.string.susfs_edit_sus_loop_path else R.string.susfs_add_sus_loop_path,
         labelRes = R.string.susfs_loop_path_label,
-        placeholderRes = R.string.susfs_loop_path_placeholder,
         initialValue = editingLoopPath ?: ""
     )
 
@@ -584,10 +307,11 @@ fun SuSFSConfigScreen(
             editingSusMap = null
         },
         onConfirm = { path ->
+            val oldPath = editingSusMap
             coroutineScope.launch {
                 isLoading = true
-                val success = if (editingSusMap != null) {
-                    SuSFSManager.editSusMap(context, editingSusMap!!, path)
+                val success = if (oldPath != null) {
+                    SuSFSManager.editSusMap(context, oldPath, path)
                 } else {
                     SuSFSManager.addSusMap(context, path)
                 }
@@ -602,7 +326,6 @@ fun SuSFSConfigScreen(
         isLoading = isLoading,
         titleRes = if (editingSusMap != null) R.string.susfs_edit_sus_map else R.string.susfs_add_sus_map,
         labelRes = R.string.susfs_sus_map_label,
-        placeholderRes = R.string.susfs_sus_map_placeholder,
         initialValue = editingSusMap ?: ""
     )
 
@@ -631,6 +354,7 @@ fun SuSFSConfigScreen(
         existingSusPaths = susPaths
     )
 
+
     AddKstatStaticallyDialog(
         showDialog = showAddKstatStaticallyDialog,
         onDismiss = {
@@ -638,12 +362,13 @@ fun SuSFSConfigScreen(
             editingKstatConfig = null
         },
         onConfirm = { path, ino, dev, nlink, size, atime, atimeNsec, mtime, mtimeNsec, ctime, ctimeNsec, blocks, blksize ->
+            val oldConfig = editingKstatConfig
             coroutineScope.launch {
                 isLoading = true
-                val success = if (editingKstatConfig != null) {
+                val success = if (oldConfig != null) {
                     SuSFSManager.editKstatConfig(
                         context,
-                        editingKstatConfig!!,
+                        oldConfig,
                         path,
                         ino,
                         dev,
@@ -683,10 +408,11 @@ fun SuSFSConfigScreen(
             editingKstatPath = null
         },
         onConfirm = { path ->
+            val oldPath = editingKstatPath
             coroutineScope.launch {
                 isLoading = true
-                val success = if (editingKstatPath != null) {
-                    SuSFSManager.editAddKstat(context, editingKstatPath!!, path)
+                val success = if (oldPath != null) {
+                    SuSFSManager.editAddKstat(context, oldPath, path)
                 } else {
                     SuSFSManager.addKstat(context, path)
                 }
@@ -701,7 +427,6 @@ fun SuSFSConfigScreen(
         isLoading = isLoading,
         titleRes = if (editingKstatPath != null) R.string.edit_kstat_path_title else R.string.add_kstat_path_title,
         labelRes = R.string.file_or_directory_path_label,
-        placeholderRes = R.string.susfs_path_placeholder,
         initialValue = editingKstatPath ?: ""
     )
 
@@ -723,8 +448,7 @@ fun SuSFSConfigScreen(
         },
         titleRes = R.string.susfs_reset_confirm_title,
         messageRes = R.string.susfs_reset_confirm_title,
-        isLoading = isLoading,
-        isDestructive = true
+        isLoading = isLoading
     )
 
     // 重置对话框
@@ -745,8 +469,7 @@ fun SuSFSConfigScreen(
         },
         titleRes = R.string.susfs_reset_paths_title,
         messageRes = R.string.susfs_reset_paths_message,
-        isLoading = isLoading,
-        isDestructive = true
+        isLoading = isLoading
     )
 
     ConfirmDialog(
@@ -766,8 +489,7 @@ fun SuSFSConfigScreen(
         },
         titleRes = R.string.susfs_reset_loop_paths_title,
         messageRes = R.string.susfs_reset_loop_paths_message,
-        isLoading = isLoading,
-        isDestructive = true
+        isLoading = isLoading
     )
 
     ConfirmDialog(
@@ -787,9 +509,9 @@ fun SuSFSConfigScreen(
         },
         titleRes = R.string.susfs_reset_sus_maps_title,
         messageRes = R.string.susfs_reset_sus_maps_message,
-        isLoading = isLoading,
-        isDestructive = true
+        isLoading = isLoading
     )
+
 
     ConfirmDialog(
         showDialog = showResetKstatDialog,
@@ -810,317 +532,111 @@ fun SuSFSConfigScreen(
         },
         titleRes = R.string.reset_kstat_config_title,
         messageRes = R.string.reset_kstat_config_message,
-        isLoading = isLoading,
-        isDestructive = true
+        isLoading = isLoading
     )
 
     // 主界面布局
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.susfs_config_title),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+            TopAppBar(
+                modifier = Modifier.hazeEffect(hazeState) {
+                    style = hazeStyle
+                    blurRadius = 30.dp
+                    noiseFactor = 0f
                 },
+                color = Color.Transparent,
+                title = stringResource(R.string.susfs_config_title),
                 navigationIcon = {
                     IconButton(onClick = {
                         if (!isNavigating) {
                             isNavigating = true
-                            navigator.popBackStack()
+                            navigator.pop()
                         }
                     }) {
+                        val layoutDirection = LocalLayoutDirection.current
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back)
+                            modifier = Modifier.graphicsLayer {
+                                if (layoutDirection == LayoutDirection.Rtl) scaleX = -1f
+                            },
+                            imageVector = MiuixIcons.Back,
+                            contentDescription = stringResource(R.string.log_viewer_back),
+                            tint = colorScheme.onBackground
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = CardConfig.cardAlpha),
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = CardConfig.cardAlpha)
-                ),
-                windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                scrollBehavior = scrollBehavior
             )
         },
-        bottomBar = {
-            // 统一的底部按钮栏
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color.Transparent,
-                shadowElevation = 0.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+        popupHost = { },
+        contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxHeight()
+                .scrollEndHaptic()
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .hazeSource(state = hazeState)
+                .padding(horizontal = 12.dp),
+            contentPadding = innerPadding,
+            overscrollEffect = null,
+        ) {
+            item {
+                // 标签页
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    when (selectedTab) {
-                        SuSFSTab.BASIC_SETTINGS -> {
-                            // 应用按钮
-                            Button(
-                                onClick = {
-                                    if (unameValue.isNotBlank() || buildTimeValue.isNotBlank()) {
-                                        coroutineScope.launch {
-                                            isLoading = true
-                                            val finalUnameValue = unameValue.trim().ifBlank { "default" }
-                                            val finalBuildTimeValue = buildTimeValue.trim().ifBlank { "default" }
-                                            val success = SuSFSManager.setUname(context, finalUnameValue, finalBuildTimeValue)
-                                            if (success) {
-                                                SuSFSManager.saveExecuteInPostFsData(context, executeInPostFsData)
-                                                SuSFSManager.saveEnableHideBl(context, enableHideBl)
-                                                SuSFSManager.saveEnableCleanupResidue(context, enableCleanupResidue)
-                                                SuSFSManager.saveEnableAvcLogSpoofing(context, enableAvcLogSpoofing)
-                                            }
-                                            isLoading = false
-                                        }
-                                    }
-                                },
-                                enabled = !isLoading && (unameValue.isNotBlank() || buildTimeValue.isNotBlank()),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(40.dp)
-                            ) {
-                                Text(
-                                    stringResource(R.string.susfs_apply),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-
-                            // 重置按钮
-                            OutlinedButton(
-                                onClick = { showConfirmReset = true },
-                                enabled = !isLoading,
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.RestoreFromTrash,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    stringResource(R.string.susfs_reset_to_default),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        SuSFSTab.SUS_PATHS -> {
-                            OutlinedButton(
-                                onClick = { showResetPathsDialog = true },
-                                enabled = !isLoading && susPaths.isNotEmpty(),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.RestoreFromTrash,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    stringResource(R.string.susfs_reset_paths_title),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        SuSFSTab.SUS_LOOP_PATHS -> {
-                            OutlinedButton(
-                                onClick = { showResetLoopPathsDialog = true },
-                                enabled = !isLoading && susLoopPaths.isNotEmpty(),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.RestoreFromTrash,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    stringResource(R.string.susfs_reset_loop_paths_title),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        SuSFSTab.SUS_MAPS -> {
-                            OutlinedButton(
-                                onClick = { showResetSusMapsDialog = true },
-                                enabled = !isLoading && susMaps.isNotEmpty(),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.RestoreFromTrash,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    stringResource(R.string.susfs_reset_sus_maps_title),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        SuSFSTab.KSTAT_CONFIG -> {
-                            OutlinedButton(
-                                onClick = { showResetKstatDialog = true },
-                                enabled = !isLoading && (kstatConfigs.isNotEmpty() || addKstatPaths.isNotEmpty()),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.RestoreFromTrash,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    stringResource(R.string.reset_kstat_config_title),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        SuSFSTab.PATH_SETTINGS -> {
-                            OutlinedButton(
-                                onClick = {
-                                    androidDataPath = "/sdcard/Android/data"
-                                    sdcardPath = "/sdcard"
-                                    coroutineScope.launch {
-                                        isLoading = true
-                                        SuSFSManager.setAndroidDataPath(context, androidDataPath)
-                                        SuSFSManager.setSdcardPath(context, sdcardPath)
-                                        isLoading = false
-                                    }
-                                },
-                                enabled = !isLoading,
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.RestoreFromTrash,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    stringResource(R.string.susfs_reset_path_title),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
-
-                        SuSFSTab.ENABLED_FEATURES -> {
-                            Button(
-                                onClick = { loadEnabledFeatures() },
-                                enabled = !isLoadingFeatures,
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    stringResource(R.string.refresh),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
+                    items(allTabs.size) { index ->
+                        val tab = allTabs[index]
+                        val isSelected = selectedTab == tab
+                        Card(
+                            modifier = Modifier
+                                .clickable { selectedTab = tab },
+                            colors = CardDefaults.defaultColors(
+                                if (isSelected) {
+                                    colorScheme.primaryContainer
+                                } else {
+                                    colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                }
+                            ),
+                            cornerRadius = 8.dp
+                        ) {
+                            Text(
+                                text = stringResource(tab.displayNameRes),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                style = MiuixTheme.textStyles.body1,
+                                fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                                color = if (isSelected) {
+                                    colorScheme.onPrimaryContainer
+                                } else {
+                                    colorScheme.onSurfaceVariantSummary
+                                }
+                            )
                         }
                     }
                 }
-            }
-        },
-        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 12.dp)
-        ) {
-            // 标签页
-            PrimaryScrollableTabRow(
-                selectedTabIndex = allTabs.indexOf(selectedTab),
-                modifier = Modifier.fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                edgePadding = 0.dp
-            ) {
-                allTabs.forEach { tab ->
-                    Tab(
-                        selected = selectedTab == tab,
-                        onClick = { selectedTab = tab },
-                        text = {
-                            Text(
-                                text = stringResource(tab.displayNameRes),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                fontSize = 13.sp,
-                                fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        modifier = Modifier.padding(horizontal = 2.dp)
-                    )
-                }
+
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            item {
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // 标签页内容
-            Box(
-                modifier = Modifier.fillMaxSize()
-            ) {
+                // 标签页内容
                 when (selectedTab) {
                     SuSFSTab.BASIC_SETTINGS -> {
                         BasicSettingsContent(
                             unameValue = unameValue,
-                            onUnameValueChange = { unameValue = it },
+                            onUnameValueChange = { value -> unameValue = value },
                             buildTimeValue = buildTimeValue,
-                            onBuildTimeValueChange = { buildTimeValue = it },
+                            onBuildTimeValueChange = { value -> buildTimeValue = value },
                             executeInPostFsData = executeInPostFsData,
-                            onExecuteInPostFsDataChange = { executeInPostFsData = it },
+                            onExecuteInPostFsDataChange = { value -> executeInPostFsData = value },
                             autoStartEnabled = autoStartEnabled,
                             canEnableAutoStart = canEnableAutoStart,
                             isLoading = isLoading,
-                            onAutoStartToggle = { enabled ->
+                            onAutoStartToggle = { enabled: Boolean ->
                                 if (canEnableAutoStart) {
                                     coroutineScope.launch {
                                         isLoading = true
@@ -1133,10 +649,8 @@ fun SuSFSConfigScreen(
                             },
                             onShowSlotInfo = { showSlotInfoDialog = true },
                             context = context,
-                            onShowBackupDialog = { showBackupDialog = true },
-                            onShowRestoreDialog = { showRestoreDialog = true },
                             enableHideBl = enableHideBl,
-                            onEnableHideBlChange = { enabled ->
+                            onEnableHideBlChange = { enabled: Boolean ->
                                 enableHideBl = enabled
                                 SuSFSManager.saveEnableHideBl(context, enabled)
                                 if (SuSFSManager.isAutoStartEnabled(context)) {
@@ -1146,7 +660,7 @@ fun SuSFSConfigScreen(
                                 }
                             },
                             enableCleanupResidue = enableCleanupResidue,
-                            onEnableCleanupResidueChange = { enabled ->
+                            onEnableCleanupResidueChange = { enabled: Boolean ->
                                 enableCleanupResidue = enabled
                                 SuSFSManager.saveEnableCleanupResidue(context, enabled)
                                 if (SuSFSManager.isAutoStartEnabled(context)) {
@@ -1156,10 +670,11 @@ fun SuSFSConfigScreen(
                                 }
                             },
                             enableAvcLogSpoofing = enableAvcLogSpoofing,
-                            onEnableAvcLogSpoofingChange = { enabled ->
+                            onEnableAvcLogSpoofingChange = { enabled: Boolean ->
                                 coroutineScope.launch {
                                     isLoading = true
-                                    val success = SuSFSManager.setEnableAvcLogSpoofing(context, enabled)
+                                    val success =
+                                        SuSFSManager.setEnableAvcLogSpoofing(context, enabled)
                                     if (success) {
                                         enableAvcLogSpoofing = enabled
                                     }
@@ -1167,7 +682,7 @@ fun SuSFSConfigScreen(
                                 }
                             },
                             hideSusMountsForAllProcs = hideSusMountsForAllProcs,
-                            onHideSusMountsForAllProcsChange = { hideForAll ->
+                            onHideSusMountsForAllProcsChange = { hideForAll: Boolean ->
                                 coroutineScope.launch {
                                     isLoading = true
                                     if (SuSFSManager.setHideSusMountsForAllProcs(
@@ -1178,6 +693,50 @@ fun SuSFSConfigScreen(
                                         hideSusMountsForAllProcs = hideForAll
                                     }
                                     isLoading = false
+                                }
+                            },
+                            onReset = { showConfirmReset = true },
+                            onApply = {
+                                coroutineScope.launch {
+                                    isLoading = true
+                                    val success = SuSFSManager.setUname(
+                                        context,
+                                        unameValue.trim(),
+                                        buildTimeValue.trim()
+                                    )
+                                    if (success) {
+                                        SuSFSManager.saveExecuteInPostFsData(
+                                            context,
+                                            executeInPostFsData
+                                        )
+                                        if (SuSFSManager.isAutoStartEnabled(context)) {
+                                            SuSFSManager.configureAutoStart(context, true)
+                                        }
+                                    }
+                                    isLoading = false
+                                }
+                            },
+                            onConfigReload = {
+                                coroutineScope.launch {
+                                    unameValue = SuSFSManager.getUnameValue(context)
+                                    buildTimeValue = SuSFSManager.getBuildTimeValue(context)
+                                    autoStartEnabled = SuSFSManager.isAutoStartEnabled(context)
+                                    executeInPostFsData =
+                                        SuSFSManager.getExecuteInPostFsData(context)
+                                    susPaths = SuSFSManager.getSusPaths(context)
+                                    susLoopPaths = SuSFSManager.getSusLoopPaths(context)
+                                    susMaps = SuSFSManager.getSusMaps(context)
+                                    androidDataPath = SuSFSManager.getAndroidDataPath(context)
+                                    sdcardPath = SuSFSManager.getSdcardPath(context)
+                                    kstatConfigs = SuSFSManager.getKstatConfigs(context)
+                                    addKstatPaths = SuSFSManager.getAddKstatPaths(context)
+                                    hideSusMountsForAllProcs =
+                                        SuSFSManager.getHideSusMountsForAllProcs(context)
+                                    enableHideBl = SuSFSManager.getEnableHideBl(context)
+                                    enableCleanupResidue =
+                                        SuSFSManager.getEnableCleanupResidue(context)
+                                    enableAvcLogSpoofing =
+                                        SuSFSManager.getEnableAvcLogSpoofing(context)
                                 }
                             }
                         )
@@ -1201,7 +760,8 @@ fun SuSFSConfigScreen(
                                 editingPath = path
                                 showAddPathDialog = true
                             },
-                            forceRefreshApps = selectedTab == SuSFSTab.SUS_PATHS
+                            forceRefreshApps = selectedTab == SuSFSTab.SUS_PATHS,
+                            onReset = { showResetPathsDialog = true }
                         )
                     }
                     SuSFSTab.SUS_LOOP_PATHS -> {
@@ -1221,7 +781,8 @@ fun SuSFSConfigScreen(
                             onEditLoopPath = { path ->
                                 editingLoopPath = path
                                 showAddLoopPathDialog = true
-                            }
+                            },
+                            onReset = { showResetLoopPathsDialog = true }
                         )
                     }
                     SuSFSTab.SUS_MAPS -> {
@@ -1241,10 +802,10 @@ fun SuSFSConfigScreen(
                             onEditSusMap = { map ->
                                 editingSusMap = map
                                 showAddSusMapDialog = true
-                            }
+                            },
+                            onReset = { showResetSusMapsDialog = true }
                         )
                     }
-
                     SuSFSTab.KSTAT_CONFIG -> {
                         KstatConfigContent(
                             kstatConfigs = kstatConfigs,
@@ -1314,6 +875,16 @@ fun SuSFSConfigScreen(
                                     SuSFSManager.setSdcardPath(context, sdcardPath.trim())
                                     isLoading = false
                                 }
+                            },
+                            onReset = {
+                                androidDataPath = "/sdcard/Android/data"
+                                sdcardPath = "/sdcard"
+                                coroutineScope.launch {
+                                    isLoading = true
+                                    SuSFSManager.setAndroidDataPath(context, androidDataPath)
+                                    SuSFSManager.setSdcardPath(context, sdcardPath)
+                                    isLoading = false
+                                }
                             }
                         )
                     }
@@ -1329,529 +900,8 @@ fun SuSFSConfigScreen(
     }
 }
 
-/**
- * 基本设置内容组件
- */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BasicSettingsContent(
-    unameValue: String,
-    onUnameValueChange: (String) -> Unit,
-    buildTimeValue: String,
-    onBuildTimeValueChange: (String) -> Unit,
-    executeInPostFsData: Boolean,
-    onExecuteInPostFsDataChange: (Boolean) -> Unit,
-    autoStartEnabled: Boolean,
-    canEnableAutoStart: Boolean,
-    isLoading: Boolean,
-    onAutoStartToggle: (Boolean) -> Unit,
-    onShowSlotInfo: () -> Unit,
-    context: Context,
-    onShowBackupDialog: () -> Unit,
-    onShowRestoreDialog: () -> Unit,
-    enableHideBl: Boolean,
-    onEnableHideBlChange: (Boolean) -> Unit,
-    enableCleanupResidue: Boolean,
-    onEnableCleanupResidueChange: (Boolean) -> Unit,
-    enableAvcLogSpoofing: Boolean,
-    onEnableAvcLogSpoofingChange: (Boolean) -> Unit,
-    hideSusMountsForAllProcs: Boolean,
-    onHideSusMountsForAllProcsChange: (Boolean) -> Unit,
-) {
-    var scriptLocationExpanded by remember { mutableStateOf(false) }
-    val isAbDevice = produceState(initialValue = false) {
-        value = isAbDevice()
-    }.value
-    val isSusVersion159 = isSusVersion159()
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // 说明卡片
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(12.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.susfs_config_description),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = stringResource(R.string.susfs_config_description_text),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 16.sp
-                )
-            }
-        }
-
-        // Uname输入框
-        OutlinedTextField(
-            value = unameValue,
-            onValueChange = onUnameValueChange,
-            label = { Text(stringResource(R.string.susfs_uname_label)) },
-            placeholder = { Text(stringResource(R.string.susfs_uname_placeholder)) },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true,
-            shape = RoundedCornerShape(8.dp)
-        )
-
-        // 构建时间伪装输入框
-        OutlinedTextField(
-            value = buildTimeValue,
-            onValueChange = onBuildTimeValueChange,
-            label = { Text(stringResource(R.string.susfs_build_time_label)) },
-            placeholder = { Text(stringResource(R.string.susfs_build_time_placeholder)) },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
-            singleLine = true,
-            shape = RoundedCornerShape(8.dp)
-        )
-
-        // 执行位置选择
-        ExposedDropdownMenuBox(
-            expanded = scriptLocationExpanded,
-            onExpandedChange = { scriptLocationExpanded = !scriptLocationExpanded }
-        ) {
-            OutlinedTextField(
-                value = if (executeInPostFsData)
-                    stringResource(R.string.susfs_execution_location_post_fs_data)
-                else
-                    stringResource(R.string.susfs_execution_location_service),
-                onValueChange = { },
-                readOnly = true,
-                label = { Text(stringResource(R.string.susfs_execution_location_label)) },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = scriptLocationExpanded) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, true),
-                shape = RoundedCornerShape(8.dp),
-                enabled = !isLoading
-            )
-            ExposedDropdownMenu(
-                expanded = scriptLocationExpanded,
-                onDismissRequest = { scriptLocationExpanded = false }
-            ) {
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(stringResource(R.string.susfs_execution_location_service))
-                            Text(
-                                stringResource(R.string.susfs_execution_location_service_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    onClick = {
-                        onExecuteInPostFsDataChange(false)
-                        scriptLocationExpanded = false
-                    }
-                )
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(stringResource(R.string.susfs_execution_location_post_fs_data))
-                            Text(
-                                stringResource(R.string.susfs_execution_location_post_fs_data_description),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    onClick = {
-                        onExecuteInPostFsDataChange(true)
-                        scriptLocationExpanded = false
-                    }
-                )
-            }
-        }
-
-        // 当前值显示
-        Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.susfs_current_value, SuSFSManager.getUnameValue(context)),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = stringResource(R.string.susfs_current_build_time, SuSFSManager.getBuildTimeValue(context)),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = stringResource(R.string.susfs_current_execution_location, if (SuSFSManager.getExecuteInPostFsData(context)) "Post-FS-Data" else "Service"),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // 开机自启动开关
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (canEnableAutoStart) {
-                    MaterialTheme.colorScheme.surface
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                }
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoMode,
-                            contentDescription = null,
-                            tint = if (canEnableAutoStart) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            },
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.susfs_autostart_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = if (canEnableAutoStart) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            }
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = if (canEnableAutoStart) {
-                            stringResource(R.string.susfs_autostart_description)
-                        } else {
-                            stringResource(R.string.susfs_autostart_requirement)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                            alpha = if (canEnableAutoStart) 1f else 0.5f
-                        ),
-                        lineHeight = 14.sp
-                    )
-                }
-                Switch(
-                    checked = autoStartEnabled,
-                    onCheckedChange = onAutoStartToggle,
-                    enabled = !isLoading && canEnableAutoStart
-                )
-            }
-        }
-
-        // 隐藏BL脚本开关
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.hide_bl_script),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.hide_bl_script_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 14.sp
-                    )
-                }
-                Switch(
-                    checked = enableHideBl,
-                    onCheckedChange = onEnableHideBlChange,
-                    enabled = !isLoading
-                )
-            }
-        }
-
-        // 清理残留脚本开关
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CleaningServices,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.cleanup_residue),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.cleanup_residue_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 14.sp
-                    )
-                }
-                Switch(
-                    checked = enableCleanupResidue,
-                    onCheckedChange = onEnableCleanupResidueChange,
-                    enabled = !isLoading
-                )
-            }
-        }
-
-        // AVC日志欺骗开关（仅在1.5.9+版本显示）
-        if (isSusVersion159) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.VisibilityOff,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = stringResource(R.string.avc_log_spoofing),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = stringResource(R.string.avc_log_spoofing_description),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 14.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = stringResource(R.string.avc_log_spoofing_warning),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                            lineHeight = 12.sp
-                        )
-                    }
-                    Switch(
-                        checked = enableAvcLogSpoofing,
-                        onCheckedChange = onEnableAvcLogSpoofingChange,
-                        enabled = !isLoading
-                    )
-                }
-            }
-        }
-
-        // 对所有进程隐藏sus挂载开关（仅在1.5.8+版本显示）
-        val isSusVersion158 = isSusVersion158()
-        if (isSusVersion158) {
-            SusMountHidingControlCard(
-                hideSusMountsForAllProcs = hideSusMountsForAllProcs,
-                isLoading = isLoading,
-                onToggleHiding = onHideSusMountsForAllProcsChange
-            )
-        }
-
-        // 槽位信息按钮
-        if (isAbDevice) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.susfs_slot_info_title),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Text(
-                        text = stringResource(R.string.susfs_slot_info_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 14.sp
-                    )
-
-                    OutlinedButton(
-                        onClick = onShowSlotInfo,
-                        enabled = !isLoading,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Storage,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            stringResource(R.string.susfs_slot_info_title),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // 备份按钮
-            OutlinedButton(
-                onClick = onShowBackupDialog,
-                enabled = !isLoading,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Backup,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    stringResource(R.string.susfs_backup_title),
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            // 还原按钮
-            OutlinedButton(
-                onClick = onShowRestoreDialog,
-                enabled = !isLoading,
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Restore,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    stringResource(R.string.susfs_restore_title),
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    }
-}
-
-/**
- * 槽位信息对话框
- */
-@Composable
-private fun SlotInfoDialog(
+fun SlotInfoDialog(
     showDialog: Boolean,
     onDismiss: () -> Unit,
     slotInfoList: List<SuSFSManager.SlotInfo>,
@@ -1865,39 +915,41 @@ private fun SlotInfoDialog(
         value = isAbDevice()
     }.value
 
-    if (showDialog && isAbDevice) {
-        AlertDialog(
+    val showDialogState = remember { mutableStateOf(showDialog && isAbDevice) }
+    
+    LaunchedEffect(showDialog, isAbDevice) {
+        showDialogState.value = showDialog && isAbDevice
+    }
+
+    if (showDialogState.value) {
+        SuperDialog(
+            show = showDialogState,
+            title = stringResource(R.string.susfs_slot_info_title),
             onDismissRequest = onDismiss,
-            title = {
-                Text(
-                    text = stringResource(R.string.susfs_slot_info_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            text = {
+            content = {
                 Column(
+                    modifier = Modifier.padding(horizontal = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
                         text = stringResource(R.string.susfs_current_active_slot, currentActiveSlot),
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MiuixTheme.textStyles.body2,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = colorScheme.primary
                     )
 
                     if (slotInfoList.isNotEmpty()) {
                         slotInfoList.forEach { slotInfo ->
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (slotInfo.slotName == currentActiveSlot) {
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                colors = CardDefaults.defaultColors(
+                                    if (slotInfo.slotName == currentActiveSlot) {
+                                        colorScheme.primary.copy(alpha = 0.1f)
                                     } else {
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                        colorScheme.surface.copy(alpha = 0.5f)
                                     }
                                 ),
-                                shape = RoundedCornerShape(8.dp)
+                                cornerRadius = 8.dp
                             ) {
                                 Column(
                                     modifier = Modifier.padding(12.dp),
@@ -1910,47 +962,50 @@ private fun SlotInfoDialog(
                                             imageVector = Icons.Default.Storage,
                                             contentDescription = null,
                                             tint = if (slotInfo.slotName == currentActiveSlot) {
-                                                MaterialTheme.colorScheme.primary
+                                                colorScheme.primary
                                             } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                                colorScheme.onSurface
                                             },
                                             modifier = Modifier.size(16.dp)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
                                             text = slotInfo.slotName,
-                                            style = MaterialTheme.typography.titleMedium,
+                                            style = MiuixTheme.textStyles.body1,
                                             fontWeight = FontWeight.Bold,
                                             color = if (slotInfo.slotName == currentActiveSlot) {
-                                                MaterialTheme.colorScheme.primary
+                                                colorScheme.primary
                                             } else {
-                                                MaterialTheme.colorScheme.onSurface
+                                                colorScheme.onSurface
                                             }
                                         )
                                         if (slotInfo.slotName == currentActiveSlot) {
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(4.dp),
-                                                color = MaterialTheme.colorScheme.primary
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(
+                                                        color = colorScheme.primary,
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    )
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                                             ) {
                                                 Text(
                                                     text = stringResource(R.string.susfs_slot_current_badge),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onPrimary,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    style = MiuixTheme.textStyles.body2,
+                                                    color = colorScheme.onPrimary
                                                 )
                                             }
                                         }
                                     }
                                     Text(
                                         text = stringResource(R.string.susfs_slot_uname, slotInfo.uname),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        style = MiuixTheme.textStyles.body2.copy(fontSize = 13.sp),
+                                        color = colorScheme.onSurface
                                     )
                                     Text(
                                         text = stringResource(R.string.susfs_slot_build_time, slotInfo.buildTime),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        style = MiuixTheme.textStyles.body2.copy(fontSize = 13.sp),
+                                        color = colorScheme.onSurface
                                     )
 
                                     Row(
@@ -1959,17 +1014,31 @@ private fun SlotInfoDialog(
                                     ) {
                                         Button(
                                             onClick = { onUseUname(slotInfo.uname) },
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(6.dp)
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp)
+                                                .padding(vertical = 8.dp),
+                                            cornerRadius = 8.dp
                                         ) {
-                                            Text(stringResource(R.string.susfs_slot_use_uname), fontSize = 12.sp)
+                                            Text(
+                                                text = stringResource(R.string.susfs_slot_use_uname),
+                                                style = MiuixTheme.textStyles.body2,
+                                                maxLines = 2
+                                            )
                                         }
                                         Button(
                                             onClick = { onUseBuildTime(slotInfo.buildTime) },
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(6.dp)
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp)
+                                                .padding(vertical = 8.dp),
+                                            cornerRadius = 8.dp
                                         ) {
-                                            Text(stringResource(R.string.susfs_slot_use_build_time), fontSize = 12.sp)
+                                            Text(
+                                                text = stringResource(R.string.susfs_slot_use_build_time),
+                                                style = MiuixTheme.textStyles.body2,
+                                                maxLines = 2
+                                            )
                                         }
                                     }
                                 }
@@ -1978,30 +1047,41 @@ private fun SlotInfoDialog(
                     } else {
                         Text(
                             text = stringResource(R.string.susfs_slot_info_unavailable),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
+                            style = MiuixTheme.textStyles.body2,
+                            color = colorScheme.error
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Button(
+                        onClick = onRefresh,
+                        enabled = !isLoadingSlotInfo,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .padding(vertical = 8.dp),
+                        cornerRadius = 8.dp
+                    ) {
+                        Text(
+                            text = stringResource(R.string.refresh)
+                        )
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .padding(vertical = 8.dp),
+                        cornerRadius = 8.dp
+                    ) {
+                        Text(
+                            text = stringResource(android.R.string.cancel)
                         )
                     }
                 }
-            },
-            confirmButton = {
-                Button(
-                    onClick = onRefresh,
-                    enabled = !isLoadingSlotInfo,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(stringResource(R.string.refresh))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(stringResource(R.string.close))
-                }
-            },
-            shape = RoundedCornerShape(12.dp)
+            }
         )
     }
 }

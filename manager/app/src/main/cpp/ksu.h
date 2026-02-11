@@ -88,8 +88,6 @@ bool is_KPM_enable();
 
 void get_hook_type(char* hook_type);
 
-bool verify_module_signature(const char* input);
-
 // Feature IDs
 enum ksu_feature_id {
     KSU_FEATURE_SU_COMPAT = 0,
@@ -174,10 +172,6 @@ struct ksu_get_full_version_cmd {
 
 struct ksu_hook_type_cmd {
 	char hook_type[32]; // Output: hook type string
-};
-
-struct ksu_enable_kpm_cmd {
-    uint8_t enabled; // Output: true if KPM is enabled
 };
 
 // IOCTL command definitions

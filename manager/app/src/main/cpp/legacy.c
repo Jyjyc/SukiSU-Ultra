@@ -44,7 +44,7 @@
 static bool ksuctl(int cmd, void* arg1, void* arg2) {
     int32_t result = 0;
     int32_t rtn = prctl(KERNEL_SU_OPTION, cmd, arg1, arg2, &result);
-    return result == KERNEL_SU_OPTION && rtn == -1;
+    return (rtn == 0 && result == KERNEL_SU_OPTION);
 }
 
 struct ksu_version_info legacy_get_info()
@@ -84,12 +84,6 @@ bool legacy_is_su_enabled() {
     int enabled = true;
     // if ksuctl failed, we assume su is enabled, and it cannot be disabled.
     ksuctl(CMD_IS_SU_ENABLED, &enabled, NULL);
-    return enabled;
-}
-
-bool legacy_is_KPM_enable() {
-    int enabled = false;
-    ksuctl(CMD_ENABLE_KPM, &enabled, NULL);
     return enabled;
 }
 

@@ -319,33 +319,9 @@ NativeBridge(getUserName, jstring, jint uid) {
     return NULL;
 }
 
-// Check if KPM is enabled
-NativeBridgeNP(isKPMEnabled, jboolean) {
-	return is_KPM_enable();
-}
-
 // Get HOOK type
 NativeBridgeNP(getHookType, jstring) {
     char hook_type[32] = { 0 };
 	get_hook_type((char *) &hook_type);
 	return GetEnvironment()->NewStringUTF(env, hook_type);
-}
-
-NativeBridge(verifyModuleSignature, jboolean, jstring modulePath) {
-#if defined(__aarch64__) || defined(_M_ARM64) || defined(__arm__) || defined(_M_ARM)
-	if (!modulePath) {
-		LogDebug("verifyModuleSignature: modulePath is null");
-		return false;
-	}
-
-	const char* cModulePath = GetEnvironment()->GetStringUTFChars(env, modulePath, nullptr);
-	bool result = verify_module_signature(cModulePath);
-	GetEnvironment()->ReleaseStringUTFChars(env, modulePath, cModulePath);
-
-	LogDebug("verifyModuleSignature: path=%s, result=%d", cModulePath, result);
-	return result;
-#else
-	LogDebug("verifyModuleSignature: not supported on non-ARM architecture");
-	return false;
-#endif
 }
